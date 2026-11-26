@@ -1,0 +1,11 @@
+*.jks
+*.keystore
+*.p12
+*.pem
+config.yml
+config.py
+repo/
+archive/
+tmp/
+unsigned/
+.env
