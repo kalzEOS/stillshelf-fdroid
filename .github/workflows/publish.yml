@@ -116,6 +116,8 @@ jobs:
           curl -fsSL "https://github.com/kalzEOS/stillshelf/archive/refs/tags/$RELEASE_TAG.tar.gz" | tar -xz --strip-components=1 -C "$source_dir"
           mkdir -p metadata/com.stillshelf.app/en-US/phoneScreenshots
           cp "$source_dir/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" icon.png
+          # Supply the app listing icon separately from the repository icon.
+          cp icon.png metadata/com.stillshelf.app/en-US/icon.png
           cp "$source_dir/fastlane/metadata/android/en-US/images/phoneScreenshots/"*.png metadata/com.stillshelf.app/en-US/phoneScreenshots/
       - name: Generate signed repository index
         if: steps.release.outputs.publish == 'true'
