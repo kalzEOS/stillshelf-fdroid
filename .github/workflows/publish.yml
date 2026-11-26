@@ -86,7 +86,7 @@ jobs:
           echo "Using $signer"
           "$signer" verify --print-certs "repo/$apk" > "$RUNNER_TEMP/apk-cert.txt"
           cat "$RUNNER_TEMP/apk-cert.txt"
-          cert=$(sed -n 's/^Signer #1 certificate SHA-256 digest:[[:space:]]*//p' "$RUNNER_TEMP/apk-cert.txt" | tr -d '\r' | tr '[:upper:]' '[:lower:]')
+          cert=$(sed -nE 's/^(Signer #[0-9]+ certificate|V[0-9]+([.][0-9]+)? Signer: certificate) SHA-256 digest:[[:space:]]*//p' "$RUNNER_TEMP/apk-cert.txt" | tr -d '\r' | tr '[:upper:]' '[:lower:]' | sort -u)
           if [ "$cert" != "7c11480ade8034453fd12540fcac2c59bef21996160bc61826c8392eac7f2d24" ]; then
             echo "::error::APK signing certificate mismatch"
             exit 1
