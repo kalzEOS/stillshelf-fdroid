@@ -17,9 +17,12 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install F-Droid tools
-        run: sudo apt-get update && sudo apt-get install -y fdroidserver
+        run: |
+          python3 -m venv "$RUNNER_TEMP/fdroid-venv"
+          "$RUNNER_TEMP/fdroid-venv/bin/python" -m pip install 'fdroidserver==2.4.5' 'androguard==4.1.4'
+          echo "$RUNNER_TEMP/fdroid-venv/bin" >> "$GITHUB_PATH"
       - name: Download F-Droid APK
         env:
           GH_TOKEN: ${{ github.token }}
