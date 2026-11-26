@@ -79,13 +79,32 @@ jobs:
           else
             cp "$RUNNER_TEMP/$RELEASE_ASSET" "repo/$apk"
           fi
+          echo "Downloaded and extracted $apk"
           sdk="$ANDROID_HOME/build-tools"
           signer=$(find "$sdk" -name apksigner -type f | sort -V | tail -n 1)
-          cert=$("$signer" verify --print-certs "repo/$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
-          test "$cert" = 7c11480ade8034453fd12540fcac2c59bef21996160bc61826c8392eac7f2d24
+          test -x "$signer" || { echo "::error::apksigner not found"; exit 1; }
+          echo "Using $signer"
+          "$signer" verify --print-certs "repo/$apk" > "$RUNNER_TEMP/apk-cert.txt"
+          cat "$RUNNER_TEMP/apk-cert.txt"
+          cert=$(sed -n 's/^Signer #1 certificate SHA-256 digest:[[:space:]]*//p' "$RUNNER_TEMP/apk-cert.txt" | tr -d '\r' | tr '[:upper:]' '[:lower:]')
+          if [ "$cert" != "7c11480ade8034453fd12540fcac2c59bef21996160bc61826c8392eac7f2d24" ]; then
+            echo "::error::APK signing certificate mismatch"
+            exit 1
+          fi
+          echo "APK signing certificate verified"
+          "$(dirname "$signer")/aapt" dump badging "repo/$apk" > "$RUNNER_TEMP/badging.txt"
+          package=$(awk -F"'" '/^package: name=/{print $2; exit}' "$RUNNER_TEMP/badging.txt")
+          if [ "$package" != "com.stillshelf.app" ]; then
+            echo "::error::Unexpected APK package: $package"
+            exit 1
+          fi
           "$(dirname "$signer")/aapt" dump permissions "repo/$apk" > "$RUNNER_TEMP/permissions.txt"
-          grep -qx 'package: com.stillshelf.app' "$RUNNER_TEMP/permissions.txt"
-          if grep -q REQUEST_INSTALL_PACKAGES "$RUNNER_TEMP/permissions.txt"; then exit 1; fi
+          cat "$RUNNER_TEMP/permissions.txt"
+          if grep -q REQUEST_INSTALL_PACKAGES "$RUNNER_TEMP/permissions.txt"; then
+            echo "::error::F-Droid APK contains the installation permission"
+            exit 1
+          fi
+          echo "APK package and permissions verified"
       - name: Copy StillShelf branding and screenshots
         if: steps.release.outputs.publish == 'true'
         env:
