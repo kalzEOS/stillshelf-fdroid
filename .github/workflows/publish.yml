@@ -1,5 +1,7 @@
 name: Publish F-Droid repository
 on:
+  schedule:
+    - cron: '23 * * * *'
   workflow_dispatch:
     inputs:
       release_tag:
@@ -16,21 +18,69 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    outputs:
+      publish: ${{ steps.release.outputs.publish }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Select release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [ -n "$REQUESTED_TAG" ]; then
+            release=$(gh release view "$REQUESTED_TAG" --repo kalzEOS/stillshelf --json tagName,assets,isDraft,isPrerelease)
+          else
+            release=$(gh release view --repo kalzEOS/stillshelf --json tagName,assets,isDraft,isPrerelease)
+          fi
+          tag=$(jq -r .tagName <<< "$release")
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          asset="StillShelf-$tag-fdroid.apk"
+          if ! jq -e --arg asset "$asset" '(.isDraft or .isPrerelease | not) and any(.assets[]; .name == $asset)' <<< "$release" >/dev/null; then
+            if [ -n "$REQUESTED_TAG" ]; then exit 1; fi
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$REQUESTED_TAG" ]; then
+            deployed=$(curl -fsSL --max-time 30 https://kalzeos.github.io/stillshelf-fdroid/release-tag.txt || true)
+            if [ "$deployed" = "$tag" ]; then
+              echo 'publish=false' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo 'publish=true' >> "$GITHUB_OUTPUT"
       - name: Install F-Droid tools
+        if: steps.release.outputs.publish == 'true'
         run: |
           python3 -m venv "$RUNNER_TEMP/fdroid-venv"
           "$RUNNER_TEMP/fdroid-venv/bin/python" -m pip install 'fdroidserver==2.4.5' 'androguard==4.1.4'
           echo "$RUNNER_TEMP/fdroid-venv/bin" >> "$GITHUB_PATH"
       - name: Download F-Droid APK
+        if: steps.release.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           mkdir -p repo
           gh release download "$RELEASE_TAG" --repo kalzEOS/stillshelf --pattern 'StillShelf-*-fdroid.apk' --dir repo
+      - name: Copy StillShelf branding and screenshots
+        if: steps.release.outputs.publish == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          source_dir="$RUNNER_TEMP/stillshelf-source"
+          mkdir -p "$source_dir"
+          curl -fsSL "https://github.com/kalzEOS/stillshelf/archive/refs/tags/$RELEASE_TAG.tar.gz" | tar -xz --strip-components=1 -C "$source_dir"
+          mkdir -p repo/icons metadata/com.stillshelf.app/en-US/phoneScreenshots
+          cp "$source_dir/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" repo/icons/icon.png
+          cp "$source_dir/fastlane/metadata/android/en-US/images/phoneScreenshots/"*.png metadata/com.stillshelf.app/en-US/phoneScreenshots/
       - name: Generate signed repository index
+        if: steps.release.outputs.publish == 'true'
         env:
           KEYSTORE_BASE64: ${{ secrets.FDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.FDROID_KEYSTORE_PASSWORD }}
@@ -45,6 +95,7 @@ jobs:
           config = {
               'repo_url': 'https://kalzeos.github.io/stillshelf-fdroid/repo',
               'repo_name': 'StillShelf',
+              'repo_icon': 'repo/icons/icon.png',
               'repo_description': 'Official StillShelf F-Droid repository',
               'archive_older': 0,
               'keystore': os.path.join(os.environ['RUNNER_TEMP'], 'fdroid.jks'),
@@ -60,14 +111,20 @@ jobs:
         if: always()
         run: rm -f config.yml "$RUNNER_TEMP/fdroid.jks"
       - name: Prepare Pages artifact
+        if: steps.release.outputs.publish == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           mkdir -p public
           cp -a repo public/repo
+          printf '%s\n' "$RELEASE_TAG" > public/release-tag.txt
       - uses: actions/upload-pages-artifact@v3
+        if: steps.release.outputs.publish == 'true'
         with:
           path: public
   deploy:
     needs: build
+    if: needs.build.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     environment:
       name: github-pages

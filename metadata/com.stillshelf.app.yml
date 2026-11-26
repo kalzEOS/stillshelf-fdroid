@@ -4,7 +4,12 @@ License: GPL-3.0-only
 SourceCode: https://github.com/kalzEOS/stillshelf
 IssueTracker: https://github.com/kalzEOS/stillshelf/issues
 Name: StillShelf
-Summary: Self-hosted media player
+Summary: Audiobookshelf and Navidrome player
 Description: |-
-  StillShelf connects to your self-hosted media servers for listening to music,
-  audiobooks and podcasts.
+  StillShelf is an Android client for self-hosted Audiobookshelf and Navidrome servers.
+
+  Browse and listen to audiobooks, music and podcasts from your own libraries.
+  Manage audiobook bookmarks, resume listening and download books for offline playback.
+  Audiobooks in M4B and MP3 formats are supported.
+
+  This distribution uses F-Droid for updates instead of the built-in GitHub updater.
