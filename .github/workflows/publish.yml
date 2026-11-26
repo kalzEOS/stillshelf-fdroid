@@ -76,8 +76,8 @@ jobs:
           source_dir="$RUNNER_TEMP/stillshelf-source"
           mkdir -p "$source_dir"
           curl -fsSL "https://github.com/kalzEOS/stillshelf/archive/refs/tags/$RELEASE_TAG.tar.gz" | tar -xz --strip-components=1 -C "$source_dir"
-          mkdir -p branding metadata/com.stillshelf.app/en-US/phoneScreenshots
-          cp "$source_dir/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" branding/icon.png
+          mkdir -p metadata/com.stillshelf.app/en-US/phoneScreenshots
+          cp "$source_dir/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" icon.png
           cp "$source_dir/fastlane/metadata/android/en-US/images/phoneScreenshots/"*.png metadata/com.stillshelf.app/en-US/phoneScreenshots/
       - name: Generate signed repository index
         if: steps.release.outputs.publish == 'true'
@@ -95,7 +95,7 @@ jobs:
           config = {
               'repo_url': 'https://kalzeos.github.io/stillshelf-fdroid/repo',
               'repo_name': 'StillShelf',
-              'repo_icon': 'branding/icon.png',
+              'repo_icon': 'icon.png',
               'repo_description': 'Official StillShelf F-Droid repository',
               'archive_older': 0,
               'keystore': os.path.join(os.environ['RUNNER_TEMP'], 'fdroid.jks'),
