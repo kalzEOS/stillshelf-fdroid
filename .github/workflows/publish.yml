@@ -38,7 +38,10 @@ jobs:
           fi
           tag=$(jq -r .tagName <<< "$release")
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          asset="StillShelf-$tag-fdroid.apk"
+          asset="StillShelf-$tag-fdroid.zip"
+          if [ "$tag" = "v0.9.2" ] && ! jq -e --arg asset "$asset" 'any(.assets[]; .name == $asset)' <<< "$release" >/dev/null; then
+            asset="StillShelf-$tag-fdroid.apk"
+          fi
           if ! jq -e --arg asset "$asset" '(.isDraft or .isPrerelease | not) and any(.assets[]; .name == $asset)' <<< "$release" >/dev/null; then
             if [ -n "$REQUESTED_TAG" ]; then exit 1; fi
             echo 'publish=false' >> "$GITHUB_OUTPUT"
@@ -52,6 +55,7 @@ jobs:
             fi
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "asset=$asset" >> "$GITHUB_OUTPUT"
           echo 'publish=true' >> "$GITHUB_OUTPUT"
       - name: Install F-Droid tools
         if: steps.release.outputs.publish == 'true'
@@ -64,9 +68,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_ASSET: ${{ steps.release.outputs.asset }}
         run: |
+          set -euo pipefail
           mkdir -p repo
-          gh release download "$RELEASE_TAG" --repo kalzEOS/stillshelf --pattern 'StillShelf-*-fdroid.apk' --dir repo
+          gh release download "$RELEASE_TAG" --repo kalzEOS/stillshelf --pattern "$RELEASE_ASSET" --dir "$RUNNER_TEMP"
+          apk="StillShelf-$RELEASE_TAG-fdroid.apk"
+          if [[ "$RELEASE_ASSET" == *.zip ]]; then
+            unzip -p "$RUNNER_TEMP/$RELEASE_ASSET" "$apk" > "repo/$apk"
+          else
+            cp "$RUNNER_TEMP/$RELEASE_ASSET" "repo/$apk"
+          fi
+          sdk="$ANDROID_HOME/build-tools"
+          signer=$(find "$sdk" -name apksigner -type f | sort -V | tail -n 1)
+          cert=$("$signer" verify --print-certs "repo/$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          test "$cert" = 7c11480ade8034453fd12540fcac2c59bef21996160bc61826c8392eac7f2d24
+          "$(dirname "$signer")/aapt" dump permissions "repo/$apk" > "$RUNNER_TEMP/permissions.txt"
+          grep -qx 'package: com.stillshelf.app' "$RUNNER_TEMP/permissions.txt"
+          if grep -q REQUEST_INSTALL_PACKAGES "$RUNNER_TEMP/permissions.txt"; then exit 1; fi
       - name: Copy StillShelf branding and screenshots
         if: steps.release.outputs.publish == 'true'
         env:
